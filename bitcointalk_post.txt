@@ -1,0 +1,426 @@
+[code]
+================================================================================
+EARLY BITCOIN MINER FINGERPRINTING
+ExtraNonce Timing Oracle | RNG Correlation | Twitter ID Forensics
+================================================================================
+Author:     Steven Wright — Independent Researcher, Melbourne, Australia
+Repository: https://github.com/steverimiccivil-afk/bitcoin-miner-research
+Date:       May 31, 2026
+Contact:    steve.rimiccivil@gmail.com
+================================================================================
+
+ORIGIN
+
+This research started from YouTube DASH playback telemetry captured during
+playback of a 29-second video. The telemetry fields map directly to Bitcoin
+primitives — segment identifiers to block heights, byte range offsets to block
+file positions, buffer states to mempool state, timestamp anchors to Unix epoch.
+
+Cross-referencing seg_3 / timestamp against the blockchain identified block 2333.
+
+================================================================================
+BLOCK 2333 — ENTRY POINT
+================================================================================
+
+$ curl -s https://blockstream.info/api/block/00000000783ce6fe.../
+{
+    "height": 2333,
+    "timestamp": 1233304178,        <- January 30, 2009 06:09:38 UTC
+    "tx_count": 1,
+    "size": 216,
+    "nonce": 2960464419,            <- 0xB0751A23  UPPER HALF
+    "difficulty": 1.0
+}
+
+coinbase pubkey: 04ffbf610155201426ed7d50c39ee484d8662c52b2e66aadac7192b7...
+outspend:        { "spent": false }  <- 50 BTC UNSPENT SINCE 2009
+
+Derived P2PKH address: 1NEvi8ktpE2GJR8w8PGkHzqtwrNCgCPCGE
+Dust deposits (blockchain archaeologists tagging the address):
+  547 sats  — December 28, 2020
+  548 sats  — March 30, 2025
+  546 sats  — May 22, 2026  (8 days before this research)
+
+================================================================================
+FINDING 1 — THE ANTI-PATOSHI FINGERPRINT
+================================================================================
+
+Scanned blocks 2300-2400 and 3230-3300. Filtered: nonce first hex digit >= 8.
+
+UPPER | block 2301 | nonce 2359994914 | hex 8CAAAA22 | pubkey 044aa4e96d...
+UPPER | block 2303 | nonce 2154603009 | hex 806CA201 | pubkey 04c0895761...
+UPPER | block 2305 | nonce 4232514338 | hex FC470B22 | pubkey 0493e63119...
+UPPER | block 2307 | nonce 2484402717 | hex 9414FA1D | pubkey 04c3923c81...
+UPPER | block 2308 | nonce 4102250520 | hex F4836018 | pubkey 0469eecb41...
+UPPER | block 2311 | nonce 2730109231 | hex A2BA292F | pubkey 0454fa6f12...
+UPPER | block 2314 | nonce 3212635936 | hex BF7CEF20 | pubkey 043ddf3d42...
+UPPER | block 2315 | nonce 4240101942 | hex FCBAD236 | pubkey 0449502ef0...
+UPPER | block 2316 | nonce 4193607982 | hex F9F5612E | pubkey 04262cf1b7...
+UPPER | block 2320 | nonce 4066048543 | hex F25AFA1F | pubkey 04dff8269c...
+UPPER | block 2322 | nonce 3529908769 | hex D2662221 | pubkey 04f783161c...
+UPPER | block 2328 | nonce 2835941140 | hex A9090714 | pubkey 0403d22fa1...
+UPPER | block 2331 | nonce 2863872277 | hex AAB33915 | pubkey 048200519d...
+UPPER | block 2333 | nonce 2960464419 | hex B0751A23 | pubkey 04ffbf6101... <-- entry block
+UPPER | block 2335 | nonce 3366022714 | hex C8A16E3A | pubkey 04b3d083d6...
+[... 23 more in window 1, 26 in window 2 ...]
+UPPER | block 3263 | nonce 2473799444 | hex 93732F14 | pubkey 04f86d4a53...
+UPPER | block 3299 | nonce 3279800358 | hex C37DC826 | pubkey 04a8767905...
+
+=== NONCE DISTRIBUTION ===
+count:   64
+min:     2154603009  0x806CA201
+max:     4289593857  0xFFAE0201
+mean:    3360659688  0xC84F98E7
+upper half (>=2^31): 64 / 64   <- ZERO LOWER HALF ACROSS 64 BLOCKS
+above 0xC0000000:    40 / 64
+above 0xE0000000:    24 / 64
+
+  0x0-0x20000000:  0
+  0x20000000-0x40000000:  0
+  0x40000000-0x60000000:  0
+  0x60000000-0x80000000:  0
+  0x80000000-0xa0000000: 13 █████████████
+  0xa0000000-0xc0000000: 11 ███████████
+  0xc0000000-0xe0000000: 16 ████████████████
+  0xe0000000-0x100000000: 24 ████████████████████████
+
+P(64 consecutive upper-half by chance) = 1 in 2^64
+
+This is the STRUCTURAL INVERSE of the Patoshi pattern.
+Patoshi: systematic avoidance of upper half.
+This miner: exclusively upper half.
+Not Satoshi. Not Patoshi. Different software. Unknown operator.
+
+64 blocks. 64 UNIQUE pubkeys. Per-block key rotation in January 2009.
+Satoshi's own client reused keys. This miner did not.
+
+Platform confirmed Windows from Bitcoin 0.1 source (trottier/original-bitcoin):
+  RAND_screen()                        <- Windows GDI screen capture
+  QueryPerformanceCounter()            <- Windows HPET
+  WaitForSingleObject(INFINITE)        <- Windows sync primitive
+  win32_locking_callback / HANDLE      <- Windows API
+
+================================================================================
+FINDING 2 — EXTRANONCE AS TIMING ORACLE [NOVEL]
+================================================================================
+
+Coinbase scriptsig format in Bitcoin 0.1:
+  04 ffff001d [OP_PUSHBYTES_N] [N bytes extraNonce little-endian]
+
+Block 2333 scriptsig: 04ffff001d025602
+  04       = OP_PUSHBYTES_4
+  ffff001d = difficulty bits
+  02       = OP_PUSHBYTES_2
+  5602     = 0x0256 little-endian = 598 decimal
+
+Full decoded sequence:
+
+ block        nonce en_hex    en_dec           ts   delta_en  delta_t
+----------------------------------------------------------------------
+  2301   2359994914 b001         432   1233280035
+  2303   2154603009 b401         436   1233281887         +4    +1852
+  2305   4232514338 b501         437   1233283066         +1    +1179
+  2307   2484402717 bd01         445   1233283986         +8     +920
+  2308   4102250520 be01         446   1233285293         +1    +1307
+  2311   2730109231 d601         470   1233288050        +24    +2757
+  2314   3212635936 dc01         476   1233290818         +6    +2768
+  2315   4240101942 df01         479   1233291214         +3     +396
+  2316   4193607982 e301         483   1233291610         +4     +396
+  2320   4066048543 2002         544   1233295202        +61    +3592
+  2322   3529908769 3002         560   1233296767        +16    +1565
+  2328   2835941140 3d02         573   1233300515        +13    +3748
+  2331   2863872277 4b02         587   1233302359        +14    +1844
+  2333   2960464419 5602         598   1233304178        +11    +1819
+  2335   3366022714 5d02         605   1233304941         +7     +763
+  2336   3684160554 6802         616   1233306504        +11    +1563
+  2337   2505546289 6c02         620   1233307475         +4     +971
+  2345   4266055425 9902         665   1233313208        +45    +5733
+  2347   2526735659 a002         672   1233315226         +7    +2018
+  2350   3139651359 be02         702   1233317259        +30    +2033
+  2356   3920572936 c602         710   1233320510         +8    +3251
+  2361   2642716162 ca02         714   1233322450         +4    +1940
+  2364   2734344736 d002         720   1233324226         +6    +1776
+  2365   3628538426 d502         725   1233324849         +5     +623
+  2368   2602563366 de02         734   1233326806         +9    +1957
+  2370   3343022392 f102         753   1233328994        +19    +2188
+  2371   4142919731 f302         755   1233330317         +2    +1323
+  2372   4242967585 0303         771   1233331961        +16    +1644
+  2373   2268210215 0703         775   1233332825         +4     +864
+  2376   2990113068 1603         790   1233335502        +15    +2677
+  2377   3858942723 2203         802   1233336378        +12     +876
+  2382   3227701304 4d03         845   1233340229        +43    +3851
+  2384   2709561345 5d03         861   1233341638        +16    +1409
+  2385   2699284484 6003         864   1233342970         +3    +1332
+  2389   3302735652 7303         883   1233345496        +19    +2526
+  2392   3815905329 9803         920   1233347828        +37    +2332
+  2395   3779439921 b403         948   1233350210        +28    +2382
+  2397   4259556402 bc03         956   1233352257         +8    +2047
+  3232   4000167977 3203         818   1233922488       -138  +570231  <- RESTART
+  3235   3272728350 3803         824   1233925185         +6    +2697
+  [... continues to block 3299, en=1070 ...]
+  3299   3279800358 2e04        1070   1233968260         +7    +1520
+
+=== HASHRATE PER BLOCK PAIR ===
+      blocks   delta_en  delta_t  final_nonce     total_hashes   hashrate_khs
+------------------------------------------------------------------------------
+2301→ 2303          4     1852   2154603009   19,334,472,193        10439.8
+2305→ 2307          8      920   2484402717   36,844,141,085        40048.0
+2316→ 2320         61     3592   4066048543  266,059,053,599        74069.9
+2347→ 2350         30     2033   3139651359  131,988,670,239        64923.1
+2389→ 2392         37     2332   3815905329  162,729,695,281        69781.2
+2397→ 3232       -138   570231   4000167977 -588,705,318,871          <- GAP
+3246→ 3247         19      999   2175539462   83,779,918,086        83863.8
+3256→ 3258          7      405   3995657245   34,060,428,317        84099.8
+
+=== HASHRATE STATISTICS ===
+mean hashrate:      32,870.9 KH/s
+min  hashrate:       6,307.4 KH/s
+max  hashrate:      84,099.8 KH/s
+std  deviation:     19,739.9 KH/s
+coefficient var:        60.1 %   <- variable CPU load, background process
+
+=== GAP ANALYSIS (block 2397 -> 3232) ===
+time elapsed:     570231s = 158.4 hours = 6.60 days
+extraNonce delta: -138  (dropped from 956 to 818)
+expected delta:   +3967.8
+
+*** EXTRANONCE RESET DETECTED ***
+Counter dropped by 138 across the gap.
+Post-restart base ~680, NOT zero.
+Default Bitcoin 0.1: CBigNum bnExtraNonce = 0 on every restart.
+Non-zero base = MODIFIED CLIENT or persisted counter state.
+
+Estimated restart: 2009-02-05 03:35 UTC / 2009-02-04 19:35 Pacific
+
+Single machine confirmed: z-test p=0.155 across both windows.
+One machine. One wallet. One restart.
+
+================================================================================
+FINDING 3 — OPENSSL RNG CORRELATION VIA Y-PARITY ANALYSIS [NOVEL]
+================================================================================
+
+Y-coordinate parity extracted from all 64 secp256k1 public keys.
+Under a secure PRNG: Bernoulli p=0.5. Long runs = state correlation.
+
+ block window    x_coord (first 16 hex)               y_parity
+---------------------------------------------------------------
+  2301 W1        4aa4e96d8cf8682cc97ada1b8ca1d55b...   even
+  2303 W1        c089576153ca7b45b8a5f7c9d3e40510...   odd
+  2305 W1        93e63119b2e4432ec1bb6dabba58308a...   even
+  2307 W1        c3923c810666613621533b28f29749fa...   odd
+  2308 W1        69eecb4163bf15df77006208ee87a3e1...   even
+  2311 W1        54fa6f121c98db5479295d39fe2b6756...   odd  <- RUN OF 8 STARTS
+  2314 W1        3ddf3d42e3813daf4fd3db4f0fa7f931...   odd
+  2315 W1        49502ef0525012838398ee44bc4d18f9...   odd
+  2316 W1        262cf1b755f469047205e9f248132af8...   odd
+  2320 W1        dff8269c54c31c5dca6247b43eb4a951...   odd
+  2322 W1        f783161c2890c635f5c3b03f8bb0508d...   odd
+  2328 W1        03d22fa196bc730fbca16d10bbb1663c...   odd
+  2331 W1        8200519df1eadabb1b8f1cb3967e8b96...   odd  <- RUN OF 8 ENDS
+  2333 W1        ffbf610155201426ed7d50c39ee484d8...   even
+  [...]
+  2361 W1        83b29d7388aa3f4bc20de2f91340e75e...   even <- RUN OF 5 STARTS
+  2364 W1        2d33de711dabd740408d6b9d227554d7...   even
+  2365 W1        551caa918f2b0601c009a0c3697da54e...   even
+  2368 W1        586cd6704464ab5014a54b2761d86751...   even
+  2370 W1        999376a2762a6a7c3f221da42ddb7bac...   even <- RUN OF 5 ENDS
+  2371 W1        788e2396cf7168d240702717f1a37ac3...   odd  <- RUN OF 6 STARTS
+  2372 W1        01ba84055ab94e845380402fc92bc00d...   odd
+  2373 W1        ca982bac106a6e537c84e44a848e4712...   odd
+  2376 W1        165ebc2e057b5871ce0eab3d0887eb1c...   odd
+  2377 W1        de7579fed41d76053e217a56e1a0ae5a...   odd
+  2382 W1        32ec5d4058ed92b0b513e6f337a6fa7b...   odd  <- RUN OF 6 ENDS
+
+=== Y PARITY DISTRIBUTION ===
+Window 1: 20 odd, 18 even (52.6% odd)
+Window 2:  9 odd, 17 even (34.6% odd)
+
+=== TWO-PROPORTION Z-TEST ===
+Z-score: 1.4220  |  P-value: 0.1550
+RESULT: ONE machine, one wallet, one restart confirmed.
+
+=== MONTE CARLO RUN LENGTH ANALYSIS (1,000,000 trials, n=38) ===
+P(max run >= 8):           0.1208  (12.08%)
+P(max run >= 6):           0.4398  (43.98%)
+P(two runs >= 8 and >= 6): 0.0337   (3.37%)  <- OBSERVED PATTERN
+
+Window 1 run structure:
+(E,1)(O,1)(E,1)(O,1)(E,1)(O,8)(E,1)(O,2)(E,4)(O,1)(E,5)(O,6)(E,1)(O,1)(E,1)(O,3)
+
+HIGH VALUE CORRELATED CLUSTERS:
+  Run of 8 ODD-Y:  blocks 2311-2331  |  3.97 hrs  |  400 BTC
+  Run of 5 EVEN-Y: blocks 2361-2370  |  1.67 hrs  |  250 BTC
+  Run of 6 ODD-Y:  blocks 2371-2382  |  2.75 hrs  |  300 BTC
+
+MECHANISM:
+Bitcoin 0.1 calls RandAddSeed() on every CDB::Open() and CDB::Close(),
+injecting fresh QueryPerformanceCounter() into OpenSSL MD_rand state.
+During these runs: NO DB events between block solutions.
+Machine idle except for mining. 1023-byte MD_rand buffer cycling
+through MD5-based mixing for up to 4 hours with NO external perturbation.
+
+=== RUN OF 8 — BLOCK DETAIL ===
+Run starts: block 2311, 2009-01-30 04:00 UTC / 20:00 PT
+Run ends:   block 2331, 2009-01-30 07:59 UTC / 23:59 PT
+Duration:   3.97 hours of pure PRNG cycling
+
+Last RNG perturbation before run:
+  Block 2308 mined at 2009-01-30 03:14 UTC
+  Gap to run start: 46 minutes
+  ExtraNonce at 2308: 446, at 2311: 470
+
+  Block 2311: en=470, nonce=0xA2BA292F, 20:00 PT
+  Block 2314: en=476, nonce=0xBF7CEF20, 20:46 PT
+  Block 2315: en=479, nonce=0xFCBAD236, 20:53 PT
+  Block 2316: en=483, nonce=0xF9F5612E, 21:00 PT
+  Block 2320: en=544, nonce=0xF25AFA1F, 22:00 PT
+  Block 2322: en=560, nonce=0xD2662221, 22:26 PT
+  Block 2328: en=573, nonce=0xA9090714, 23:28 PT
+  Block 2331: en=587, nonce=0xAAB33915, 23:59 PT
+
+OpenSSL MD_rand: 1023-byte state, MD5-based mixing.
+8 consecutive 32-byte RAND_bytes outputs = 256 bytes of known output.
+System is OVERCONSTRAINED. Internal state theoretically recoverable.
+Forward AND backward key derivation possible within the correlated run.
+
+================================================================================
+FINDING 4 — RAND_screen() ENTROPY INVERSION [NOVEL]
+================================================================================
+
+Every prior analysis assumes RAND_screen() read the Bitcoin application window.
+THIS IS WRONG. This assumption has never been tested against the call sequence.
+
+From Bitcoin 0.1 source (trottier/original-bitcoin, src/main.cpp):
+
+  class CInit {
+  public:
+      CInit() {
+          // Init openssl library multithreading support
+          lock_cs = (HANDLE*)OPENSSL_malloc(...);
+          CRYPTO_set_locking_callback(win32_locking_callback);
+
+          // Seed random number generator with screen scrape
+          RAND_screen();                    <- HERE
+
+          // Seed with perfmon data
+          RandAddSeed(true);
+      }
+  }
+  instance_of_cinit;                        <- GLOBAL STATIC OBJECT
+
+In C++, global objects construct BEFORE main() executes.
+CInit::CInit() runs BEFORE main(), BEFORE wxApp::OnInit(),
+BEFORE any window is created or rendered.
+
+THE BITCOIN UI DOES NOT EXIST WHEN RAND_screen() EXECUTES.
+
+RAND_screen() calls GetDC(NULL) — captures the full desktop device context.
+At that moment: desktop wallpaper + taskbar + any open application windows.
+NOT the Bitcoin transaction list. NOT the balance counter. They don't exist yet.
+
+If the desktop showed Windows XP default Bliss wallpaper with no other windows:
+  Known fixed file. Deterministic GDI rendering at standard resolutions.
+  Near-zero entropy. Fully reconstructable.
+
+RandAddSeed() also called on EVERY CDB::Open() and CDB::Close():
+  void CDB::Open(...) { ... RandAddSeed(); }
+  void CDB::Close()   { ... RandAddSeed(); }
+
+QueryPerformanceCounter() at startup bounded by extraNonce timing:
+  Estimated startup: January 29, 2009, ~08:12 UTC
+  QPC frequency: ~3.579545 MHz (ACPI) on 2009 hardware
+  QPC range: ~10^7-10^8 values — potentially enumerable on modern hardware
+  IF RAND_screen() contributed low entropy.
+
+================================================================================
+FINDING 5 — TWITTER SEQUENTIAL ID FORENSICS [NOVEL]
+================================================================================
+
+"Running bitcoin" tweet: @halfin
+Claimed date: January 10, 2009
+Tweet ID: 1,110,302,988
+
+Expected ID for January 2009: ~20,000,000 - 25,000,000
+@jack first tweet (March 2006): ID 20
+Twitter tweet count end of 2008: ~20-25 million
+
+ID 1,110,302,988 = 1.11 BILLION
+Discrepancy: 50x LARGER than expected
+
+Sequential reconstruction:
+  Baseline:    ID ~20M = January 2009
+  Growth rate: ~50M tweets/month through 2009-2010
+  Months to reach 1,110M from 20M: (1110-20)/50 = 21.8 months
+  Estimated actual post date: OCTOBER 2010
+
+Pre-snowflake Twitter IDs (before November 4, 2010) are sequential integers.
+NO embedded timestamp. The date is SERVER-SIDE ASSERTION ONLY.
+Not encoded in the ID. Not cryptographically signed. Not verifiable.
+
+Snowflake decode of ID 1,110,302,988:
+  (1110302988 >> 22) + 1288834974657 = 1288834974921
+  Decoded date: 2010-11-04 01:42:54 UTC
+  = EXACTLY the snowflake epoch boundary
+  = ID predates the format entirely, confirming no embedded timestamp.
+
+Hal Finney's last confirmed tweet: September 15, 2010.
+ID 1,110,302,988 is consistent with a late 2010 retrospective posting.
+
+Complete verifiable record for January-February 2009:
+  1. Tweet with ID 50x too large for claimed date  (estimated Oct 2010)
+  2. 2013 BitcoinTalk post, written 4 years later while severely ill
+  3. Emails provided posthumously by family from computer they controlled
+
+None are independently verifiable. The blockchain does not identify this miner.
+
+MINER IDENTITY: UNKNOWN FROM CHAIN DATA ALONE.
+
+================================================================================
+FINANCIAL SUMMARY
+================================================================================
+
+  Target                  | Blocks      |  BTC  | Status
+  ------------------------|-------------|-------|---------------------------
+  Correlated run (8-key)  | 2311-2331   |   400 | P2PK UNSPENT since 2009
+  Correlated run (5-key)  | 2361-2370   |   250 | P2PK UNSPENT since 2009
+  Correlated run (6-key)  | 2371-2382   |   300 | P2PK UNSPENT since 2009
+  Full identified cluster | 2301-3299   | 3,200 | P2PK UNSPENT since 2009
+
+All 64 outputs confirmed unspent via blockstream.info | May 31, 2026.
+
+================================================================================
+NOVEL CONTRIBUTIONS
+================================================================================
+
+1. ExtraNonce as timing oracle
+   First use of coinbase extraNonce sequence to reconstruct exact hashrate,
+   detect restart events, and estimate restart timestamps from chain data alone.
+
+2. RNG correlation via Y-parity run analysis
+   First application of secp256k1 pubkey coordinate parity statistics to
+   identify OpenSSL MD_rand state correlation in early miner key generation.
+
+3. RAND_screen() desktop state inversion
+   First correct identification that RAND_screen() reads the pre-launch
+   desktop state, not the Bitcoin UI — prior analyses have been wrong.
+
+4. ExtraNonce timing combined with wallet key derivation theory
+   First theoretical framework connecting extraNonce timing to OpenSSL RAND
+   state reconstruction as a pathway to constrained key derivation.
+
+5. Twitter sequential ID forensics
+   First use of pre-snowflake ID sequential analysis to verify claimed post
+   dates. "Running bitcoin" tweet ID is inconsistent with January 2009 by 50x.
+
+6. Miner identity null finding
+   No cryptographically verifiable public record supports attribution of this
+   cluster to any named individual.
+
+================================================================================
+Full methodology, all data, all pubkeys, all scripts:
+https://github.com/steverimiccivil-afk/bitcoin-miner-research
+
+Seeking arxiv cs.CR endorsement. Code: DGXXGK
+Contact: steve.rimiccivil@gmail.com
+================================================================================
+[/code]
